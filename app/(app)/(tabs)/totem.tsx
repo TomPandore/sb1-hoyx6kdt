@@ -11,15 +11,17 @@ import { LinearGradient } from 'expo-linear-gradient';
 import { router } from 'expo-router';
 import { COLORS } from '@/constants/Colors';
 import { BORDER_RADIUS, FONTS, SPACING } from '@/constants/Layout';
-import Button from '@/components/Button';
 import ProgressBar from '@/components/ProgressBar';
+import Button from '@/components/Button';
 import { useAuth } from '@/context/AuthContext';
 import { useProgram } from '@/context/ProgramContext';
 import { supabase } from '@/lib/supabase';
+import { RefreshCw } from 'lucide-react-native';
 import Animated, { 
   useSharedValue, 
   useAnimatedStyle, 
   withRepeat, 
+  withSequence, 
   withTiming, 
   Easing 
 } from 'react-native-reanimated';
@@ -28,6 +30,7 @@ interface ClanData {
   nom_clan: string;
   couleur_theme: string;
   image_url: string;
+  rituel_entree: string;
 }
 
 export default function TotemScreen() {
@@ -39,12 +42,14 @@ export default function TotemScreen() {
   
   useEffect(() => {
     glowValue.value = withRepeat(
-      withTiming(1, { duration: 2000, easing: Easing.inOut(Easing.ease) }),
+      withSequence(
+        withTiming(1, { duration: 2000, easing: Easing.inOut(Easing.ease) }),
+        withTiming(0, { duration: 2000, easing: Easing.inOut(Easing.ease) })
+      ),
       -1,
       true
     );
 
-    // Fetch clan data when component mounts
     if (user?.clanId) {
       fetchClanData();
     }
@@ -54,7 +59,7 @@ export default function TotemScreen() {
     try {
       const { data, error } = await supabase
         .from('clans')
-        .select('nom_clan, couleur_theme, image_url')
+        .select('nom_clan, couleur_theme, image_url, rituel_entree')
         .eq('id', user?.clanId)
         .single();
 
@@ -85,6 +90,10 @@ export default function TotemScreen() {
     if (!userProgram) return 0;
     
     return userProgram.currentDay / currentProgram.duration;
+  };
+
+  const handleChangeClan = () => {
+    router.push('/(auth)/onboarding/clan');
   };
 
   return (
@@ -159,6 +168,22 @@ export default function TotemScreen() {
             </View>
           </LinearGradient>
         </ImageBackground>
+      </View>
+      
+      <View style={styles.clanInfoContainer}>
+        <View style={styles.clanInfoHeader}>
+          <Text style={styles.sectionTitle}>Tu es un {clanData.nom_clan} !</Text>
+          <TouchableOpacity 
+            style={[styles.editButton, { backgroundColor: getClanColor() }]}
+            onPress={handleChangeClan}
+          >
+            <RefreshCw size={16} color={COLORS.text} />
+          </TouchableOpacity>
+        </View>
+        
+        <View style={styles.clanInfoCard}>
+          <Text style={styles.ritualText}>{clanData.rituel_entree}</Text>
+        </View>
       </View>
       
       <View style={styles.journeyContainer}>
@@ -291,12 +316,39 @@ const styles = StyleSheet.create({
   programButton: {
     minWidth: 200,
   },
+  clanInfoContainer: {
+    marginBottom: SPACING.xl,
+  },
+  clanInfoHeader: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    marginBottom: SPACING.md,
+  },
+  editButton: {
+    width: 32,
+    height: 32,
+    borderRadius: 16,
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  clanInfoCard: {
+    backgroundColor: COLORS.card,
+    borderRadius: BORDER_RADIUS.lg,
+    padding: SPACING.lg,
+  },
+  ritualText: {
+    ...FONTS.body,
+    color: COLORS.text,
+    fontStyle: 'italic',
+    lineHeight: 24,
+  },
   journeyContainer: {
     marginBottom: SPACING.xl,
   },
   sectionTitle: {
     ...FONTS.subheading,
-    color: COLORS.textSecondary,
+    color: COLORS.text,
     marginBottom: SPACING.md,
     letterSpacing: 1,
   },
