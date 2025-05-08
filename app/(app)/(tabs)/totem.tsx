@@ -1,12 +1,11 @@
-import React, { useEffect } from 'react';
+import React, { useState, useEffect } from 'react';
 import { 
   StyleSheet, 
   Text, 
   View, 
   ScrollView, 
-  Image,
-  TouchableOpacity,
   ImageBackground,
+  TouchableOpacity,
 } from 'react-native';
 import { LinearGradient } from 'expo-linear-gradient';
 import { router } from 'expo-router';
@@ -16,7 +15,7 @@ import Button from '@/components/Button';
 import ProgressBar from '@/components/ProgressBar';
 import { useAuth } from '@/context/AuthContext';
 import { useProgram } from '@/context/ProgramContext';
-import { CLAN_IMAGES } from '@/assets/images/clans';
+import { supabase } from '@/lib/supabase';
 import Animated, { 
   useSharedValue, 
   useAnimatedStyle, 
@@ -25,9 +24,16 @@ import Animated, {
   Easing 
 } from 'react-native-reanimated';
 
+interface ClanData {
+  nom_clan: string;
+  couleur_theme: string;
+  image_url: string;
+}
+
 export default function TotemScreen() {
   const { user } = useAuth();
   const { currentProgram, userPrograms } = useProgram();
+  const [clanData, setClanData] = useState<ClanData | null>(null);
   
   const glowValue = useSharedValue(0);
   
@@ -37,7 +43,27 @@ export default function TotemScreen() {
       -1,
       true
     );
-  }, []);
+
+    // Fetch clan data when component mounts
+    if (user?.clanId) {
+      fetchClanData();
+    }
+  }, [user?.clanId]);
+
+  const fetchClanData = async () => {
+    try {
+      const { data, error } = await supabase
+        .from('clans')
+        .select('nom_clan, couleur_theme, image_url')
+        .eq('id', user?.clanId)
+        .single();
+
+      if (error) throw error;
+      if (data) setClanData(data);
+    } catch (error) {
+      console.error('Error fetching clan data:', error);
+    }
+  };
 
   const animatedGlowStyle = useAnimatedStyle(() => {
     return {
@@ -46,23 +72,10 @@ export default function TotemScreen() {
     };
   });
 
-  if (!user) return null;
+  if (!user || !clanData) return null;
 
   const getClanColor = () => {
-    return COLORS.clan[user.clan];
-  };
-  
-  const getClanImage = () => {
-    return CLAN_IMAGES[user.clan];
-  };
-  
-  const getClanName = () => {
-    switch (user.clan) {
-      case 'onotka': return 'ONOTKA';
-      case 'ekloa': return 'EKLOA';
-      case 'okwaho': return 'OKWÁHO';
-      default: return '';
-    }
+    return clanData.couleur_theme || COLORS.primary;
   };
   
   const getCurrentProgramProgress = () => {
@@ -82,21 +95,27 @@ export default function TotemScreen() {
       
       <View style={styles.totemContainer}>
         <ImageBackground
-          source={{ uri: getClanImage() }}
+          source={{ uri: clanData.image_url }}
           style={styles.clanBackground}
           imageStyle={styles.clanBackgroundImage}
         >
           <LinearGradient
-            colors={['rgba(0,0,0,0.5)', 'rgba(0,0,0,0.8)']}
+            colors={['rgba(0,0,0,0.1)', 'rgba(0,0,0,0.7)', 'rgba(0,0,0,0.9)']}
             style={styles.gradient}
           >
-            <Animated.View style={[styles.glowCircle, { backgroundColor: getClanColor() }, animatedGlowStyle]} />
+            <Animated.View 
+              style={[
+                styles.glowCircle, 
+                { backgroundColor: getClanColor() }, 
+                animatedGlowStyle
+              ]} 
+            />
             
             <View style={styles.totemContent}>
               <Text style={styles.welcomeText}>Bienvenue, {user.name}</Text>
               
               <View style={[styles.clanBadge, { backgroundColor: getClanColor() }]}>
-                <Text style={styles.clanName}>CLAN {getClanName()}</Text>
+                <Text style={styles.clanName}>CLAN {clanData.nom_clan}</Text>
               </View>
               
               <View style={styles.statsContainer}>
@@ -118,7 +137,11 @@ export default function TotemScreen() {
               {currentProgram ? (
                 <View style={styles.programContainer}>
                   <Text style={styles.programTitle}>{currentProgram.title}</Text>
-                  <ProgressBar progress={getCurrentProgramProgress()} showPercentage />
+                  <ProgressBar 
+                    progress={getCurrentProgramProgress()} 
+                    showPercentage 
+                    color={getClanColor()}
+                  />
                 </View>
               ) : (
                 <View style={styles.noProgramContainer}>
@@ -153,7 +176,7 @@ export default function TotemScreen() {
           
           {currentProgram ? (
             <TouchableOpacity 
-              style={styles.ritualButton}
+              style={[styles.ritualButton, { backgroundColor: getClanColor() }]}
               onPress={() => router.push('/(app)/(tabs)/ritual')}
             >
               <Text style={styles.ritualButtonText}>Voir le rituel du jour</Text>
@@ -304,7 +327,6 @@ const styles = StyleSheet.create({
     fontFamily: 'Rajdhani-Bold',
   },
   ritualButton: {
-    backgroundColor: COLORS.cardSecondary,
     padding: SPACING.md,
     borderRadius: BORDER_RADIUS.md,
     alignItems: 'center',

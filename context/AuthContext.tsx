@@ -2,7 +2,7 @@ import React, { createContext, useState, useContext, useEffect, ReactNode } from
 import { router } from 'expo-router';
 import * as SecureStore from 'expo-secure-store';
 import { Platform } from 'react-native';
-import { User, Clan } from '@/types';
+import { User } from '@/types';
 import { supabase } from '@/lib/supabase';
 
 interface AuthContextProps {
@@ -11,8 +11,7 @@ interface AuthContextProps {
   signIn: (email: string, password: string) => Promise<void>;
   signUp: (name: string, email: string, password: string) => Promise<void>;
   signOut: () => Promise<void>;
-  setCurrentOnboardingData: (data: Partial<User>) => void;
-  currentOnboardingData: Partial<User>;
+  updateUserClan: (clanId: string) => Promise<void>;
 }
 
 const defaultContext: AuthContextProps = {
@@ -21,8 +20,7 @@ const defaultContext: AuthContextProps = {
   signIn: async () => {},
   signUp: async () => {},
   signOut: async () => {},
-  setCurrentOnboardingData: () => {},
-  currentOnboardingData: {},
+  updateUserClan: async () => {},
 };
 
 const AuthContext = createContext<AuthContextProps>(defaultContext);
@@ -56,31 +54,46 @@ async function removeFromStorage(key: string) {
 export function AuthProvider({ children }: { children: ReactNode }) {
   const [user, setUser] = useState<User | null>(null);
   const [isLoading, setIsLoading] = useState<boolean>(true);
-  const [currentOnboardingData, setCurrentOnboardingData] = useState<Partial<User>>({});
 
   useEffect(() => {
     const loadUser = async () => {
       try {
         const session = await supabase.auth.getSession();
-        if (session.data.session) {
-          const { data: profile } = await supabase
-            .from('profiles')
-            .select('*')
-            .eq('id', session.data.session.user.id)
-            .single();
+        
+        // If no session exists, set loading to false and return early
+        if (!session.data.session) {
+          setIsLoading(false);
+          return;
+        }
 
-          if (profile) {
-            const progress = profile.progress as { totalCompletedDays: number };
-            const userData: User = {
-              id: profile.id,
-              name: profile.name,
-              email: profile.email,
-              clan: profile.clan_id as unknown as Clan,
-              totalDaysCompleted: progress?.totalCompletedDays || 0,
-            };
-            setUser(userData);
-            router.replace('/(app)/(tabs)/totem');
-          }
+        // Fetch the user profile using maybeSingle() to handle cases where profile doesn't exist
+        const { data: profile } = await supabase
+          .from('profiles')
+          .select('*')
+          .eq('id', session.data.session.user.id)
+          .maybeSingle();
+
+        // If no profile exists, set loading to false and return early
+        if (!profile) {
+          setIsLoading(false);
+          return;
+        }
+
+        const progress = profile.progress as { totalCompletedDays: number };
+        const userData: User = {
+          id: profile.id,
+          name: profile.name,
+          email: profile.email,
+          clanId: profile.clan_id,
+          totalDaysCompleted: progress?.totalCompletedDays || 0,
+        };
+        setUser(userData);
+        
+        // If user has no clan, redirect to clan selection
+        if (!profile.clan_id) {
+          router.replace('/(auth)/onboarding/clan');
+        } else {
+          router.replace('/(app)/(tabs)/totem');
         }
       } catch (error) {
         console.error('Failed to load user:', error);
@@ -107,7 +120,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
           .from('profiles')
           .select('*')
           .eq('id', data.user.id)
-          .single();
+          .maybeSingle();
 
         if (profile) {
           const progress = profile.progress as { totalCompletedDays: number };
@@ -115,11 +128,17 @@ export function AuthProvider({ children }: { children: ReactNode }) {
             id: profile.id,
             name: profile.name,
             email: profile.email,
-            clan: profile.clan_id as unknown as Clan,
+            clanId: profile.clan_id,
             totalDaysCompleted: progress?.totalCompletedDays || 0,
           };
           setUser(userData);
-          router.replace('/(app)/(tabs)/totem');
+          
+          // If user has no clan, redirect to clan selection
+          if (!profile.clan_id) {
+            router.replace('/(auth)/onboarding/clan');
+          } else {
+            router.replace('/(app)/(tabs)/totem');
+          }
         }
       }
     } catch (error) {
@@ -134,13 +153,13 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     try {
       setIsLoading(true);
       
-      // First, create the auth user
+      // Create the auth user
       const { data: authData, error: authError } = await supabase.auth.signUp({
         email,
         password,
         options: {
           data: {
-            name: name // Add name to user metadata
+            name: name
           }
         }
       });
@@ -148,33 +167,11 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       if (authError) throw authError;
 
       if (authData.user) {
-        const defaultProgress = {
-          currentProgram: null,
-          currentDay: 1,
-          streak: 0,
-          totalCompletedDays: 0
-        };
-
-        // Then create the profile with the name
-        const { error: profileError } = await supabase
-          .from('profiles')
-          .insert([
-            {
-              id: authData.user.id,
-              name: name, // Use the name parameter here
-              email: email,
-              progress: defaultProgress,
-              jour_actuel: 1
-            }
-          ]);
-
-        if (profileError) throw profileError;
-
         const userData: User = {
           id: authData.user.id,
-          name: name, // Set the name in the user object
+          name: name,
           email: email,
-          clan: null,
+          clanId: null,
           totalDaysCompleted: 0,
         };
         
@@ -183,6 +180,29 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       }
     } catch (error) {
       console.error('Sign up failed:', error);
+      throw error;
+    } finally {
+      setIsLoading(false);
+    }
+  };
+
+  const updateUserClan = async (clanId: string) => {
+    try {
+      setIsLoading(true);
+      
+      if (!user) return;
+      
+      const { error } = await supabase
+        .from('profiles')
+        .update({ clan_id: clanId })
+        .eq('id', user.id);
+      
+      if (error) throw error;
+      
+      setUser(prev => prev ? { ...prev, clanId } : null);
+      router.replace('/(app)/(tabs)/totem');
+    } catch (error) {
+      console.error('Failed to update clan:', error);
       throw error;
     } finally {
       setIsLoading(false);
@@ -207,8 +227,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         signIn,
         signUp,
         signOut,
-        currentOnboardingData,
-        setCurrentOnboardingData,
+        updateUserClan,
       }}
     >
       {children}

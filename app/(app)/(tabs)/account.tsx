@@ -1,4 +1,4 @@
-import React from 'react';
+import React, { useState, useEffect } from 'react';
 import { 
   StyleSheet, 
   Text, 
@@ -13,25 +13,37 @@ import { COLORS } from '@/constants/Colors';
 import { BORDER_RADIUS, FONTS, SPACING } from '@/constants/Layout';
 import Button from '@/components/Button';
 import { useAuth } from '@/context/AuthContext';
-import { CLAN_IMAGES } from '@/assets/images/clans';
 import { Settings, User, LogOut, Award, CreditCard as Edit } from 'lucide-react-native';
+import { supabase } from '@/lib/supabase';
 
 export default function AccountScreen() {
   const { user, signOut } = useAuth();
+  const [clanName, setClanName] = useState('');
   
-  if (!user) return null;
-  
-  const getClanName = () => {
-    switch (user.clan) {
-      case 'onotka': return 'Onotka';
-      case 'ekloa': return 'Ekloa';
-      case 'okwaho': return 'Okwáho';
-      default: return '';
+  useEffect(() => {
+    if (user?.clanId) {
+      fetchClanName();
+    }
+  }, [user?.clanId]);
+
+  const fetchClanName = async () => {
+    try {
+      const { data, error } = await supabase
+        .from('clans')
+        .select('nom_clan')
+        .eq('id', user?.clanId)
+        .single();
+
+      if (error) throw error;
+      if (data) setClanName(data.nom_clan);
+    } catch (error) {
+      console.error('Error fetching clan name:', error);
     }
   };
   
+  if (!user) return null;
+  
   const handleSignOut = () => {
-    // On web, we can use Alert API
     if (Platform.OS === 'web') {
       if (confirm('Êtes-vous sûr de vouloir vous déconnecter ?')) {
         signOut();
@@ -39,7 +51,6 @@ export default function AccountScreen() {
       return;
     }
     
-    // On native, use Alert API
     Alert.alert(
       'Déconnexion',
       'Êtes-vous sûr de vouloir vous déconnecter ?',
@@ -56,7 +67,7 @@ export default function AccountScreen() {
         <View style={styles.profileHeader}>
           <View style={styles.profileImageContainer}>
             <Image 
-              source={{ uri: CLAN_IMAGES[user.clan] }}
+              source={{ uri: 'https://images.pexels.com/photos/7674497/pexels-photo-7674497.jpeg' }}
               style={styles.profileImage}
             />
             <TouchableOpacity style={styles.editButton}>
@@ -66,7 +77,7 @@ export default function AccountScreen() {
           
           <View style={styles.profileInfo}>
             <Text style={styles.userName}>{user.name}</Text>
-            <Text style={styles.userClan}>Clan {getClanName()}</Text>
+            <Text style={styles.userClan}>Clan {clanName}</Text>
             <Text style={styles.userEmail}>{user.email}</Text>
           </View>
         </View>

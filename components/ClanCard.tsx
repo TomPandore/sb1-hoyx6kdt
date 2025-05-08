@@ -13,16 +13,17 @@ import Animated, {
   Extrapolate 
 } from 'react-native-reanimated';
 import { Check, Shield } from 'lucide-react-native';
-import { Clan } from '@/types';
 import { COLORS } from '@/constants/Colors';
 import { BORDER_RADIUS, FONTS, SPACING } from '@/constants/Layout';
 
 interface ClanCardProps {
-  clan: Clan;
-  title: string;
-  description: string;
-  objectives: string[];
-  imageUrl: string;
+  clan: {
+    id: string;
+    nom_clan: string;
+    tagline: string;
+    description: string;
+    image_url: string;
+  };
   isSelected: boolean;
   onSelect: () => void;
   position: number;
@@ -32,20 +33,12 @@ interface ClanCardProps {
 
 export default function ClanCard({
   clan,
-  title,
-  description,
-  objectives,
-  imageUrl,
   isSelected,
   onSelect,
   position,
   scrollPosition,
   cardWidth,
 }: ClanCardProps) {
-  const getClanColor = () => {
-    return COLORS.clan[clan];
-  };
-  
   const animatedStyle = useAnimatedStyle(() => {
     const scale = interpolate(
       scrollPosition.value,
@@ -74,11 +67,11 @@ export default function ClanCard({
         onPress={onSelect}
         style={[
           styles.touchable,
-          isSelected && { borderColor: getClanColor(), borderWidth: 3 }
+          isSelected && { borderColor: COLORS.primary, borderWidth: 3 }
         ]}
       >
         <ImageBackground
-          source={{ uri: imageUrl }}
+          source={{ uri: clan.image_url }}
           style={styles.imageBackground}
           imageStyle={styles.imageStyle}
         >
@@ -87,27 +80,25 @@ export default function ClanCard({
             style={styles.gradient}
           >
             {isSelected && (
-              <View style={[styles.selectedBadge, { backgroundColor: getClanColor() }]}>
+              <View style={[styles.selectedBadge, { backgroundColor: COLORS.primary }]}>
                 <Shield size={24} color={COLORS.text} />
                 <Check size={16} color={COLORS.text} style={styles.checkIcon} />
               </View>
             )}
             
             <View style={styles.contentContainer}>
-              <View style={[styles.clanBadge, { backgroundColor: getClanColor() }]}>
-                <Text style={styles.clanName}>{title}</Text>
+              <View style={[styles.clanBadge, { backgroundColor: COLORS.primary }]}>
+                <Text style={styles.clanName}>{clan.nom_clan}</Text>
               </View>
               
-              <Text style={styles.clanDescription}>{description}</Text>
-              
-              <View style={styles.objectivesContainer}>
-                <Text style={styles.objectivesTitle}>💥 Objectif:</Text>
-                <Text style={styles.objectivesText}>{objectives.join(', ')}</Text>
-              </View>
+              <Text style={styles.tagline}>{clan.tagline}</Text>
+              <Text style={styles.description}>{clan.description}</Text>
               
               {isSelected && (
-                <View style={[styles.selectedIndicator, { borderColor: getClanColor() }]}>
-                  <Text style={[styles.selectedText, { color: getClanColor() }]}>Sélectionné</Text>
+                <View style={[styles.selectedIndicator, { borderColor: COLORS.primary }]}>
+                  <Text style={[styles.selectedText, { color: COLORS.primary }]}>
+                    Sélectionné
+                  </Text>
                 </View>
               )}
             </View>
@@ -168,22 +159,15 @@ const styles = StyleSheet.create({
     color: COLORS.text,
     fontFamily: 'Rajdhani-Bold',
   },
-  clanDescription: {
-    ...FONTS.body,
-    color: COLORS.text,
-    marginBottom: SPACING.md,
-  },
-  objectivesContainer: {
-    marginBottom: SPACING.lg,
-  },
-  objectivesTitle: {
+  tagline: {
     ...FONTS.subheading,
     color: COLORS.text,
-    marginBottom: SPACING.xs,
+    marginBottom: SPACING.sm,
   },
-  objectivesText: {
+  description: {
     ...FONTS.body,
     color: COLORS.text,
+    marginBottom: SPACING.lg,
   },
   selectedIndicator: {
     paddingHorizontal: SPACING.md,

@@ -1,10 +1,8 @@
-export type Clan = 'onotka' | 'ekloa' | 'okwaho';
-
 export interface User {
   id: string;
   name: string;
   email: string;
-  clan: Clan;
+  clanId: string | null;
   totalDaysCompleted: number;
   currentProgramId?: string;
 }

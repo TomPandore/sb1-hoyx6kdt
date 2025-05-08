@@ -1,90 +1,89 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import {
   StyleSheet,
   Text,
   View,
   Dimensions,
 } from 'react-native';
-import { router } from 'expo-router';
 import { COLORS } from '@/constants/Colors';
 import { BORDER_RADIUS, FONTS, SPACING } from '@/constants/Layout';
-import { CLAN_DATA } from '@/assets/images/clans';
 import Button from '@/components/Button';
 import ClanCard from '@/components/ClanCard';
-import { Clan } from '@/types';
+import PaginationDot from '@/components/PaginationDot';
 import { useAuth } from '@/context/AuthContext';
+import { supabase } from '@/lib/supabase';
 import Animated, { 
   useSharedValue,
   useAnimatedScrollHandler,
-  interpolate,
-  useAnimatedStyle,
 } from 'react-native-reanimated';
 
 const { width } = Dimensions.get('window');
 const CARD_WIDTH = width - SPACING.lg * 2;
 
+interface Clan {
+  id: string;
+  nom_clan: string;
+  tagline: string;
+  description: string;
+  image_url: string;
+}
+
 export default function ClanSelectionScreen() {
-  const [selectedClan, setSelectedClan] = useState<Clan | null>(null);
+  const [clans, setClans] = useState<Clan[]>([]);
+  const [selectedClanId, setSelectedClanId] = useState<string | null>(null);
+  const [isLoading, setIsLoading] = useState(false);
   const scrollX = useSharedValue(0);
-  const { user, setCurrentOnboardingData } = useAuth();
+  const { user, updateUserClan } = useAuth();
   
+  useEffect(() => {
+    fetchClans();
+  }, []);
+
+  const fetchClans = async () => {
+    try {
+      const { data, error } = await supabase
+        .from('clans')
+        .select('*')
+        .order('created_at', { ascending: true });
+
+      if (error) throw error;
+      if (data) setClans(data);
+    } catch (error) {
+      console.error('Error fetching clans:', error);
+    }
+  };
+
   const handleScroll = useAnimatedScrollHandler({
     onScroll: (event) => {
       scrollX.value = event.contentOffset.x;
     },
   });
 
-  const handleSelectClan = (clan: Clan) => {
-    setSelectedClan(clan);
+  const handleSelectClan = (clanId: string) => {
+    setSelectedClanId(clanId);
   };
 
-  const handleNext = () => {
-    if (!selectedClan) return;
+  const handleNext = async () => {
+    if (!selectedClanId) return;
     
-    setCurrentOnboardingData({ 
-      ...user, 
-      clan: selectedClan 
-    });
-    router.push('/(app)/(tabs)/totem');
+    try {
+      setIsLoading(true);
+      await updateUserClan(selectedClanId);
+    } catch (error) {
+      console.error('Error updating clan:', error);
+    }
   };
 
   const renderPaginationDots = () => {
-    return CLAN_DATA.map((_, i) => {
-      const dotStyle = useAnimatedStyle(() => {
-        const inputRange = [
-          (i - 1) * CARD_WIDTH,
-          i * CARD_WIDTH,
-          (i + 1) * CARD_WIDTH,
-        ];
-        
-        const scale = interpolate(
-          scrollX.value,
-          inputRange,
-          [0.8, 1.2, 0.8],
-          'clamp'
-        );
-        
-        const opacity = interpolate(
-          scrollX.value,
-          inputRange,
-          [0.4, 1, 0.4],
-          'clamp'
-        );
-        
-        return {
-          transform: [{ scale }],
-          opacity,
-          backgroundColor: selectedClan === CLAN_DATA[i].id ? COLORS.clan[CLAN_DATA[i].id as Clan] : COLORS.textSecondary,
-        };
-      });
-
-      return (
-        <Animated.View
-          key={`dot-${i}`}
-          style={[styles.paginationDot, dotStyle]}
-        />
-      );
-    });
+    return clans.map((_, i) => (
+      <PaginationDot
+        key={`dot-${i}`}
+        index={i}
+        scrollX={scrollX}
+        cardWidth={CARD_WIDTH + SPACING.md}
+        isSelected={selectedClanId === clans[i].id}
+      />
+    ));
   };
 
   return (
@@ -102,7 +101,7 @@ export default function ClanSelectionScreen() {
         </View>
 
         <Animated.FlatList
-          data={CLAN_DATA}
+          data={clans}
           horizontal
           showsHorizontalScrollIndicator={false}
           snapToInterval={CARD_WIDTH + SPACING.md}
@@ -113,13 +112,9 @@ export default function ClanSelectionScreen() {
           renderItem={({ item, index }) => (
             <View style={{ width: CARD_WIDTH, marginRight: SPACING.md }}>
               <ClanCard
-                clan={item.id as Clan}
-                title={item.title}
-                description={item.description}
-                objectives={item.objectives}
-                imageUrl={item.imageUrl}
-                isSelected={selectedClan === item.id}
-                onSelect={() => handleSelectClan(item.id as Clan)}
+                clan={item}
+                isSelected={selectedClanId === item.id}
+                onSelect={() => handleSelectClan(item.id)}
                 position={index}
                 scrollPosition={scrollX}
                 cardWidth={CARD_WIDTH + SPACING.md}
@@ -136,7 +131,8 @@ export default function ClanSelectionScreen() {
           <Button
             title="Continuer"
             onPress={handleNext}
-            disabled={!selectedClan}
+            disabled={!selectedClanId}
+            isLoading={isLoading}
             fullWidth
           />
         </View>
@@ -186,12 +182,6 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
     alignItems: 'center',
     marginTop: SPACING.md,
-  },
-  paginationDot: {
-    width: 8,
-    height: 8,
-    borderRadius: 4,
-    marginHorizontal: 4,
   },
   buttonContainer: {
     marginVertical: SPACING.lg,
